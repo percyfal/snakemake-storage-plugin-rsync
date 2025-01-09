@@ -1,14 +1,12 @@
 import os
 from pathlib import Path
-import shutil
 import subprocess
-from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, List
 from urllib.parse import urlparse
 
 import sysrsync
 
-from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
+from snakemake_interface_common.exceptions import WorkflowError
 from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
     StorageProviderBase,
     StorageQueryValidationResult,
@@ -20,51 +18,13 @@ from snakemake_interface_storage_plugins.storage_object import (
     StorageObjectRead,
     StorageObjectWrite,
     StorageObjectGlob,
-    StorageObjectTouch,
     retry_decorator,
 )
 from snakemake_interface_storage_plugins.io import (
     IOCacheStorageInterface,
     Mtime,
+    get_constant_prefix,
 )
-from snakemake_interface_common.utils import lutime
-
-
-# Optional:
-# Define settings for your storage plugin (e.g. host url, credentials).
-# They will occur in the Snakemake CLI as --storage-<storage-plugin-name>-<param-name>
-# Make sure that all defined fields are 'Optional' and specify a default value
-# of None or anything else that makes sense in your case.
-# Note that we allow storage plugin settings to be tagged by the user. That means,
-# that each of them can be specified multiple times (an implicit nargs=+), and
-# the user can add a tag in front of each value (e.g. tagname1:value1 tagname2:value2).
-# This way, a storage plugin can be used multiple times within a workflow with different
-# settings.
-# @dataclass
-# class StorageProviderSettings(StorageProviderSettingsBase):
-#     myparam: Optional[int] = field(
-#         default=None,
-#         metadata={
-#             "help": "Some help text",
-#             # Optionally request that setting is also available for specification
-#             # via an environment variable. The variable will be named automatically as
-#             # SNAKEMAKE_<storage-plugin-name>_<param-name>, all upper case.
-#             # This mechanism should only be used for passwords, usernames, and other
-#             # credentials.
-#             # For other items, we rather recommend to let people use a profile
-#             # for setting defaults
-#             # (https://snakemake.readthedocs.io/en/stable/executing/cli.html#profiles).
-#             "env_var": False,
-#             # Optionally specify a function that parses the value given by the user.
-#             # This is useful to create complex types from the user input.
-#             "parse_func": ...,
-#             # If a parse_func is specified, you also have to specify an unparse_func
-#             # that converts the parsed value back to a string.
-#             "unparse_func": ...,
-#             # Optionally specify that setting is required when the executor is in use.
-#             "required": True,
-#         },
-#     )
 
 
 # Required:
@@ -94,7 +54,6 @@ class StorageProvider(StorageProviderBase):
                 description="A rsync URL",
             )
         ]
-
 
     def rate_limiter_key(self, query: str, operation: Operation) -> Any:
         """Return a key for identifying a rate limiter given a query and an operation.
@@ -138,7 +97,6 @@ class StorageProvider(StorageProviderBase):
             query=query,
             valid=True,
         )
-
 
 
 # Required:
@@ -197,7 +155,6 @@ class StorageObject(
         parsed = urlparse(self.query)
         return f"{parsed.netloc}{parsed.path}"
 
-
     def cleanup(self):
         """Perform local cleanup of any remainders of the storage object."""
         # self.local_path() should not be removed, as this is taken care of by
@@ -217,7 +174,6 @@ class StorageObject(
         # return the modification time
         return self._stat_to_mtime(self._stat(follow_symlinks=False))
 
-
     @retry_decorator
     def size(self) -> int:
         # return the size in bytes
@@ -234,7 +190,6 @@ class StorageObject(
         )
         print(cmd)
         self._run_cmd(cmd)
-
 
     # The following to methods are only required if the class inherits from
     # StorageObjectReadWrite.
@@ -260,7 +215,7 @@ class StorageObject(
             )
         except subprocess.CalledProcessError as e:
             raise WorkflowError(e.stdout.decode())
-        
+
     # The following to methods are only required if the class inherits from
     # StorageObjectGlob.
 
@@ -293,4 +248,3 @@ class StorageObject(
             if timestamp.exists():
                 return os.stat(timestamp, follow_symlinks=False).st_mtime
         return stat.st_mtime
-        
