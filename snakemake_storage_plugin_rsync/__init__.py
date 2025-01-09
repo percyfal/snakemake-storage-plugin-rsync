@@ -153,7 +153,11 @@ class StorageObject(
     def local_suffix(self) -> str:
         """Return a unique suffix for the local path, determined from self.query."""
         parsed = urlparse(self.query)
-        return f"{parsed.netloc}{parsed.path}"
+        suffix = parsed.path
+        if suffix.startswith("/"):
+            # convert absolute path to unique relative path
+            suffix = f"__abspath__/{suffix[1:]}"
+        return suffix
 
     def cleanup(self):
         """Perform local cleanup of any remainders of the storage object."""
@@ -183,12 +187,9 @@ class StorageObject(
     def retrieve_object(self):
         """Rsync object to local storage path if it does not exist."""
         # Ensure that the object is accessible locally under self.local_path()
-        print("Trying to retrieve")
-        print(self.scheme)
         cmd = sysrsync.get_rsync_command(
             str(self.query_path), str(self.local_path()), options=["-av"]
         )
-        print(cmd)
         self._run_cmd(cmd)
 
     # The following to methods are only required if the class inherits from
